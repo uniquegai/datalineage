@@ -57,7 +57,7 @@ def get_sql_file_content(file_url, access_token):
 
 
 def main():
-    st.title("🔍 SQL Data Lineage Analyzer with Groq & GitHub API")
+    st.title("🔍 Data Lineage Analyzer")
 
     sql_repo_url = st.text_input("🔗 GitHub Repository URL (e.g., https://github.com/user/repo)")
     access_token = st.text_input("🔐 GitHub Personal Access Token", type="password")
