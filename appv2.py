@@ -1,8 +1,9 @@
 import streamlit as st
-import os
-import subprocess
+import requests
 from groq import Groq
 from config import groq_api_key
+
+GITHUB_API = "https://api.github.com"
 
 def analyze_sql_script(sql_script):
     """
@@ -11,102 +12,88 @@ def analyze_sql_script(sql_script):
     try:
         client = Groq(api_key=groq_api_key)
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes SQL scripts."},
-                {"role": "user", "content": f"Analyze the following SQL script and identify source tables, destination tables, and business logic. Provide the source tables:\n\n{sql_script}"}
-            ],
-            max_tokens=150,
-            n=1,
-            stop=None,
-            temperature=0.7,
-        )
-        source_tables = response.choices[0].message.content.strip()
+        prompts = {
+            "source_tables": "Provide the source tables:",
+            "destination_tables": "Provide the destination tables:",
+            "business_logic": "Provide the business logic:"
+        }
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes SQL scripts."},
-                {"role": "user", "content": f"Analyze the following SQL script and identify source tables, destination tables, and business logic. Provide the destination tables:\n\n{sql_script}"}
-            ],
-            max_tokens=150,
-            n=1,
-            stop=None,
-            temperature=0.7,
-        )
-        destination_tables = response.choices[0].message.content.strip()
+        results = {}
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes SQL scripts."},
-                {"role": "user", "content": f"Analyze the following SQL script and identify source tables, destination tables, and business logic. Provide the business logic:\n\n{sql_script}"}
-            ],
-            max_tokens=250,
-            n=1,
-            stop=None,
-            temperature=0.7,
-        )
-        business_logic = response.choices[0].message.content.strip()
+        for key, prompt in prompts.items():
+            response = client.chat.completions.create(
+                model="llama-3-1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that analyzes SQL scripts."},
+                    {"role": "user", "content": f"Analyze the following SQL script and identify source tables, destination tables, and business logic. {prompt}\n\n{sql_script}"}
+                ],
+                max_tokens=300,
+                temperature=0.3,
+            )
+            results[key] = response.choices[0].message.content.strip()
 
-        return source_tables, destination_tables, business_logic
+        return results["source_tables"], results["destination_tables"], results["business_logic"]
     except Exception as e:
         return "", "", f"Error analyzing script: {e}"
 
 
+def list_sql_files(repo_owner, repo_name, access_token, path=""):
+    """Lists .sql files in a GitHub repo using GitHub API"""
+    url = f"{GITHUB_API}/repos/{repo_owner}/{repo_name}/contents/{path}"
+    headers = {"Authorization": f"token {access_token}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"GitHub API error: {response.text}")
+    files = response.json()
+    return [f for f in files if f["name"].endswith(".sql") and f["type"] == "file"]
+
+
+def get_sql_file_content(file_url, access_token):
+    headers = {"Authorization": f"token {access_token}"}
+    response = requests.get(file_url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Error reading file: {response.text}")
+    return response.text
+
+
 def main():
-    st.title("Data Lineage Analyser")
+    st.title("🔍 SQL Data Lineage Analyzer with Groq & GitHub API")
 
-    # Set the app repository URL
-    app_repo_url = "https://github.com/uniquegai/dlineage"
-
-    # Get SQL scripts repository URL and personal access token from the user
-    sql_repo_url = st.text_input("SQL Scripts Repository URL")
-    access_token = st.text_input("Personal Access Token", type="password")
+    sql_repo_url = st.text_input("🔗 GitHub Repository URL (e.g., https://github.com/user/repo)")
+    access_token = st.text_input("🔐 GitHub Personal Access Token", type="password")
 
     if not sql_repo_url or not access_token:
-        st.warning("Please provide the SQL Scripts Repository URL and personal access token.")
+        st.warning("Please enter the repository URL and access token.")
         return
 
-    # Clone the SQL scripts repository
     try:
-        sql_repo_name = sql_repo_url.split("/")[-1].replace(".git", "")
-        sql_clone_path = os.path.join(".", sql_repo_name)
-        
-        # Construct the clone URL with the access token
-        clone_url = sql_repo_url.replace("https://", f"https://{access_token}:x-oauth-basic@")
-        
-        clone_command = f"git clone {clone_url} {sql_clone_path}"
-        subprocess.run(clone_command, shell=True, check=True)
-        
+        path_parts = sql_repo_url.strip("/").split("/")
+        repo_owner = path_parts[-2]
+        repo_name = path_parts[-1].replace(".git", "")
+
+        sql_files = list_sql_files(repo_owner, repo_name, access_token)
+
+        if not sql_files:
+            st.warning("No .sql files found in the repo.")
+            return
+
+        selected_file = st.selectbox("📄 Select a SQL file", [f["name"] for f in sql_files])
+        file_url = next(f["download_url"] for f in sql_files if f["name"] == selected_file)
+        sql_script = get_sql_file_content(file_url, access_token)
+
+        st.code(sql_script, language="sql")
+
+        if st.button("🚀 Analyze SQL"):
+            source, destination, logic = analyze_sql_script(sql_script)
+
+            st.subheader("📊 Analysis Results")
+            st.markdown(f"**Source Tables:** {source}")
+            st.markdown(f"**Destination Tables:** {destination}")
+            st.markdown(f"**Business Logic:** {logic}")
+
     except Exception as e:
-        st.error(f"Error cloning SQL scripts repository: {e}")
-        return
+        st.error(f"❌ Error: {e}")
 
-    # Get list of SQL files from the cloned repository
-    sql_files = [f for f in os.listdir(sql_clone_path) if f.endswith(".sql")]
-
-    if not sql_files:
-        st.warning("No SQL files found in the SQL scripts repository.")
-        return
-
-    # Select SQL file to analyze
-    selected_sql_file = st.selectbox("Select SQL file", sql_files)
-
-    # Read SQL script from the selected file
-    sql_script_path = os.path.join(sql_clone_path, selected_sql_file)
-    with open(sql_script_path, "r") as f:
-        sql_script = f.read()
-
-    # Analyze SQL script
-    source_tables, destination_tables, business_logic = analyze_sql_script(sql_script)
-
-    # Display analysis results
-    st.subheader("Analysis Results")
-    st.write(f"**Source Tables:** {source_tables}")
-    st.write(f"**Destination Tables:** {destination_tables}")
-    st.write(f"**Business Logic:** {business_logic}")
 
 if __name__ == "__main__":
     main()
