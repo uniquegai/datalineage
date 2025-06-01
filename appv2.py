@@ -73,7 +73,7 @@ def main():
         sql_clone_path = os.path.join(".", sql_repo_name)
         
         # Construct the clone URL with the access token
-        clone_url = sql_repo_url.replace("https://", f"https://{access_token}@")
+        clone_url = sql_repo_url.replace("https://", f"https://{access_token}:x-oauth-basic@")
         
         clone_command = f"git clone {clone_url} {sql_clone_path}"
         subprocess.run(clone_command, shell=True, check=True)
