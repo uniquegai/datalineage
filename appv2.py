@@ -22,7 +22,7 @@ def analyze_sql_script(sql_script):
 
         for key, prompt in prompts.items():
             response = client.chat.completions.create(
-                model="model="llama3-70b-8192",
+                model="llama3-70b-8192",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes SQL scripts."},
                     {"role": "user", "content": f"Analyze the following SQL script and identify source tables, destination tables, and business logic. {prompt}\n\n{sql_script}"}
