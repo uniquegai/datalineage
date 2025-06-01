@@ -58,41 +58,43 @@ def analyze_sql_script(sql_script):
 def main():
     st.title("Data Lineage Analyser")
 
-    # Get GitHub repository URL and personal access token from the user
-    repo_url = st.text_input("GitHub Repository URL")
+    # Get GitHub repository URLs and personal access token from the user
+    app_repo_url = st.text_input("App Repository URL", value="https://github.com/uniquegai/dlineage")
+    sql_repo_url = st.text_input("SQL Scripts Repository URL")
     access_token = st.text_input("Personal Access Token", type="password")
 
-    if not repo_url or not access_token:
-        st.warning("Please provide the GitHub repository URL and personal access token.")
+    if not sql_repo_url or not access_token:
+        st.warning("Please provide the SQL Scripts Repository URL and personal access token.")
         return
 
-    # Clone the repository
+    # Clone the SQL scripts repository
     try:
-        repo_name = repo_url.split("/")[-1].replace(".git", "")
-        clone_path = os.path.join(".", repo_name)
+        sql_repo_name = sql_repo_url.split("/")[-1].replace(".git", "")
+        sql_clone_path = os.path.join(".", sql_repo_name)
         
         # Construct the clone URL with the access token
-        clone_url = repo_url.replace("https://", f"https://{access_token}@")
+        clone_url = sql_repo_url.replace("https://", f"https://{access_token}@")
         
-        clone_command = f"git clone {clone_url} {clone_path}"
+        clone_command = f"git clone {clone_url} {sql_clone_path}"
         subprocess.run(clone_command, shell=True, check=True)
-        os.chdir(clone_path)
+        
     except Exception as e:
-        st.error(f"Error cloning repository: {e}")
+        st.error(f"Error cloning SQL scripts repository: {e}")
         return
 
     # Get list of SQL files from the cloned repository
-    sql_files = [f for f in os.listdir(".") if f.endswith(".sql")]
+    sql_files = [f for f in os.listdir(sql_clone_path) if f.endswith(".sql")]
 
     if not sql_files:
-        st.warning("No SQL files found in the repository.")
+        st.warning("No SQL files found in the SQL scripts repository.")
         return
 
     # Select SQL file to analyze
     selected_sql_file = st.selectbox("Select SQL file", sql_files)
 
     # Read SQL script from the selected file
-    with open(selected_sql_file, "r") as f:
+    sql_script_path = os.path.join(sql_clone_path, selected_sql_file)
+    with open(sql_script_path, "r") as f:
         sql_script = f.read()
 
     # Analyze SQL script
@@ -105,6 +107,4 @@ def main():
     st.write(f"**Business Logic:** {business_logic}")
 
 if __name__ == "__main__":
-    # Change current directory to the project directory
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     main()
