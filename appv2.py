@@ -58,8 +58,10 @@ def analyze_sql_script(sql_script):
 def main():
     st.title("Data Lineage Analyser")
 
-    # Get GitHub repository URLs and personal access token from the user
-    app_repo_url = st.text_input("App Repository URL", value="https://github.com/uniquegai/dlineage")
+    # Set the app repository URL
+    app_repo_url = "https://github.com/uniquegai/dlineage"
+
+    # Get SQL scripts repository URL and personal access token from the user
     sql_repo_url = st.text_input("SQL Scripts Repository URL")
     access_token = st.text_input("Personal Access Token", type="password")
 
